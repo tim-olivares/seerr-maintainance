@@ -2,6 +2,17 @@
 
 This guide covers the failure cases handled by `Update-Seerr.ps1` and the checks to make before retrying. Commands assume PowerShell 7 in the repository directory.
 
+## Docker CLI is unavailable
+
+The script requires the Docker CLI and a reachable Docker engine. If it reports that `docker` is not in `PATH`, open a new PowerShell session after installing or updating Docker Desktop and confirm the CLI is available:
+
+```powershell
+Get-Command docker
+docker info
+```
+
+If the CLI is found but `docker info` fails, check that Docker Desktop is running and that the selected Docker context points to the intended engine. Do not proceed with `-Apply` until the dry run can inspect the expected Seerr container.
+
 ## The dry run stops before showing a plan
 
 The script checks Docker connectivity and validates the current `seerr` container before it prints a plan. Check the active Docker context and server first:
