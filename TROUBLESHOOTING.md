@@ -26,6 +26,10 @@ docker inspect seerr --format '{{json .Mounts}}'
 
 The container must use the `seerr-data` named volume read/write at `/app/config`. If it does not, stop and confirm the deployment layout before using this maintenance script.
 
+## Unsupported Docker configuration
+
+Before creating a backup or changing a container, the script compares container-level settings with the current image configuration and checks non-default host, network, and mount settings against the recreation options it supports. If it reports an unsupported setting such as `HostConfig.CpuShares` or `Config.Healthcheck`, the operation stops before backup creation and container changes. Review the reported setting and either add explicit recreation support or reset it to the intended default before retrying. Do not remove the safety check to force an update.
+
 ## Backup creation or verification fails
 
 The update stops before pulling an image or replacing the container. If Seerr was running, the script attempts to start it again. Confirm its state, then check free disk space and that Windows `tar.exe` is available:
@@ -40,7 +44,7 @@ Do not remove the named volume to clear space. Backups are stored outside Docker
 
 ## Update does not become responsive
 
-The script waits up to `HealthTimeoutSeconds` for a running container and an HTTP response from `http://localhost:5055`. Inspect recent logs and container state:
+When Seerr was running before the update, the script waits up to `HealthTimeoutSeconds` for a running replacement and an HTTP response from `http://localhost:5055`. When it was stopped, the script leaves the replacement unstarted and verifies its image and named-volume mount without an HTTP check. Inspect container state and recent logs:
 
 ```powershell
 docker ps -a --filter "name=^/seerr$"
@@ -48,7 +52,7 @@ docker logs --tail 100 seerr
 Invoke-WebRequest -Uri http://localhost:5055 -TimeoutSec 10
 ```
 
-The deployment does not define a Docker health check, so the script uses container state and HTTP response checks. The response check accepts HTTP status codes from 200 through 499; investigate the application logs if the endpoint responds with an error status.
+The deployment does not define a Docker health check, so the script uses container state and HTTP response checks. The script follows redirects and accepts final HTTP status codes from 200 through 399. A 4xx or 5xx response fails the check; inspect the application logs and endpoint configuration.
 
 ## Rollback cannot find its record or image
 
@@ -63,7 +67,7 @@ If the previous image is absent, retrieve the exact image ID recorded as `Previo
 
 ## Rollback leaves a staging container
 
-When a `seerr` container already exists, rollback creates a stopped staging container before removing the existing one. If staging fails, the existing container remains in place. If recovery fails after the existing container was removed, inspect the named staging container:
+When a `seerr` container already exists, rollback creates a stopped staging container before removing the existing one. If staging fails, the existing container remains in place. If recovery fails after the existing container was removed, the script reports whether the replacement is still staged or has already been renamed to `seerr`. Inspect the reported container:
 
 ```powershell
 docker ps -a --filter "name=seerr-rollback-" --no-trunc
@@ -81,6 +85,8 @@ Then rerun the rollback command to verify the saved image, volume mount, and HTT
 ```powershell
 pwsh -NoProfile -File .\Update-Seerr.ps1 -Rollback -ApplyRollback
 ```
+
+If the replacement has already been renamed to `seerr`, do not rename it again. Inspect its state and logs, then rerun rollback to stage and verify the saved image and configuration.
 
 ## Preserve the data volume
 
